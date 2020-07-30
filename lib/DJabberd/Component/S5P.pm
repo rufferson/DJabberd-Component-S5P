@@ -84,24 +84,25 @@ sub set_config_extip {
 
 sub discover {
     my ($self, $iq) =@_;
+    $logger->debug("Discovering streamhost from ".$iq->from);
     unless($self->vhost->handles_jid($iq->from_jid)) {
-	$iq->send_error("<error type='auth'>
-	<forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>
-</error>");
+	my $err = $self->erply($iq, 'auth', 'forbidden');
+	$err->deliver($self->vhost);
 	return;
     }
     unless($self->{proxy}) {
-	$iq->send_error("<error type='cancel'>
-	<not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>
-</error>");
+	my $err = $self->erply($iq, 'cancel', 'not-allowed');
+	$err->deliver($self->vhost);
 	return;
     }
     my $query = $iq->first_element->clone;
     my $jid = $self->domain;
     my $host = $self->{exthost} || $self->domain;
     my $port = $self->{port};
-    $query->push_child("<streamhost host='$host' jid='$jid' port='$port'/>");
-    $iq->send_reply('result', $query->as_xml);
+    my $rsp = $iq->make_response;
+    $query->set_raw("<streamhost host='$host' jid='$jid' port='$port'/>");
+    $rsp->set_raw($query->as_xml);
+    $rsp->deliver($self->vhost);
 }
 
 sub activate {
@@ -182,7 +183,7 @@ sub finalize {
 sub register {
     my ($self, $vhost) = @_;
     $vhost->register_hook("GetPlugin", sub { $_[1]->set($self) if($_[2] eq __PACKAGE__) });
-    $vhost->server->_start_server($self->{port}, 'DJabberd::Connection::S5S');
+    $self->{proxy} = $vhost->server->_start_server($self->{port}, 'DJabberd::Connection::S5S');
     $self->SUPER::register($vhost);
 }
 
@@ -201,13 +202,14 @@ sub identities {
 }
 
 sub erply {
-    my ($self, $iq, $err, $err_el, $err_msg, $retry) = @_;
+    my ($self, $iq, $err, $err_el, $err_msg) = @_;
     my $e = DJabberd::XMLElement->new('','error',
 	    {type=>$err},
-	    [ DJabberd::XMLElement->new(NSERR,$err_el,{},[]) ]
+	    [ DJabberd::XMLElement->new(NSERR,$err_el,{xmlns=>NSERR},[]) ]
     );
     $e->push_child(DJabberd::XMLElement->new(NSERR,'text',{},[],$err_msg)) if($err_msg);
     $err = $iq->make_response;
+    $err->set_attr('{}type','error');
     $err->push_child($iq->first_element);
     $err->push_child($e);
     return $err;
