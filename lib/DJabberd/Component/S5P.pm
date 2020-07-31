@@ -119,6 +119,7 @@ sub activate {
 	$err = 'modify';
 	$err_el = 'bad-request';
 	$err_msg = 'Me no understand';
+	$logger->debug("$err_msg: ".$iq->as_xml);
     } elsif(!$self->vhost->handles_jid($iq->from_jid)) {
 	$err = 'auth';
 	$err_el = 'forbidden';
@@ -153,6 +154,7 @@ sub activate {
 
 sub add_conn {
     my ($self, $conn) = @_;
+    $logger->debug("Adding connection $conn with hash ".$conn->hash);
     push(@{ $self->{scs}{$conn->hash} ||= [] }, $conn);
     if(scalar(@{ $self->{scs}->{$conn->hash} }) > 2) {
 	my $ex = shift(@{ $self->{scs}->{$conn->hash} });
