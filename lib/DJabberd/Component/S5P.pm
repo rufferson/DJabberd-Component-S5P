@@ -97,7 +97,7 @@ sub discover {
     }
     my $query = $iq->first_element->clone;
     my $jid = $self->domain;
-    my $host = $self->{exthost} || $self->domain;
+    my $host = $self->{extip} || $self->domain;
     my $port = $self->{port};
     my $rsp = $iq->make_response;
     $query->set_raw("<streamhost host='$host' jid='$jid' port='$port'/>");
