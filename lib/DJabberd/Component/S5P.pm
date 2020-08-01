@@ -154,12 +154,25 @@ sub activate {
 
 sub add_conn {
     my ($self, $conn) = @_;
+    return unless($conn->connected);
+    if(ref($self->{scs}{$conn->hash}) && $self->{scs}{$conn->hash}->[0] && $self->{scs}{$conn->hash}->[0]->active) {
+	return $conn->err($conn->hash,'already active');
+    }
     $logger->debug("Adding connection $conn with hash ".$conn->hash);
     push(@{ $self->{scs}{$conn->hash} ||= [] }, $conn);
     if(scalar(@{ $self->{scs}->{$conn->hash} }) > 2) {
 	my $ex = shift(@{ $self->{scs}->{$conn->hash} });
-	$ex->close();
+	$ex->close('Conflict');
     }
+}
+
+sub del_conn {
+    my ($self, $conn) = @_;
+    return unless($conn->hash);
+    return unless(ref($self->{scs}->{$conn->hash}));
+    $logger->debug("Removing connection $conn with hash ".$conn->hash);
+    my @na = grep{$_!=$conn}@{ $self->{scs}->{$conn->hash} };
+    $self->{scs}{$conn->hash} = \@na;
 }
 
 sub finalize {

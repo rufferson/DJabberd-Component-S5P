@@ -93,7 +93,6 @@ sub handshake {
 	$self->{state} = CONNECT;
 	if($self->{srv}) {
 	    $self->{hash} = $hash;
-	    $self->write(pack('CCCC C/A* S',5,0,0,3,$hash,0));
 	    # Now broadcast our socket to all vhosts
 	    DJabberd->foreach_vhost(sub {
 		my ($vhost) = @_;
@@ -103,6 +102,7 @@ sub handshake {
 			set => sub { $_[1]->add_conn($self); }
 		    });
 	    });
+	    $self->write(pack('CCCC C/A* S',5,($self->{closed}?5:0),0,3,$hash,0));
 	} else {
 	    return $self->err('Hash:',$hash,'<>',$self->hash) unless($hash eq $self->hash);
 	}
@@ -117,6 +117,9 @@ sub activate {
     $self->{state} = ACTIVE;
 }
 
+sub active { $_[0]->{state} == ACTIVE }
+sub connected { $_[0]->{state} == CONNECT }
+
 sub open {
     my ($self) = @_;
     $self->{buf} = undef;
@@ -127,13 +130,34 @@ sub open {
 sub log {
     my ($self, @log) = @_;
     unshift(@log, ($self->{srv} ? 'Server:':'Client:'));
-    $DJabberd::Component::S5P::logger->debug(join(" ", @log));
+    $DJabberd::Component::S5P::logger->debug(join(" ", map{(defined $_ ? $_ : '(undef)')}@log));
 }
 
 sub err {
     my ($self, @err) = @_;
     $self->log(@err);
-    $self->{state} = CLOSED;
-    return $self->write(pack('CC',5,255)) if($self->{state} < CONNECT);
+    if($self->{state} < CONNECT) {
+	$self->write(pack('CC',5,255))
+    }
+    $self->close('Error');
+}
+
+sub close {
+    my ($self, $reason) = @_;
+    $self->log($reason);
+    return if($self->{closed} && $self->{state} == CLOSED);
+    if($self->{srv} && $self->{hash} && $self->{state} >= CONNECT) {
+	# Now unbroadcast our socket from all vhosts
+	DJabberd->foreach_vhost(sub {
+		my ($vhost) = @_;
+		$vhost->hook_chain_fast('GetPlugin',
+		    [ 'DJabberd::Component::S5P' ],
+		    {
+			set => sub { $_[1]->del_conn($self); }
+		    });
+	});
+    }
+    $self->SUPER::close($reason);
+    return $self->{state} = CLOSED;
 }
 1;
