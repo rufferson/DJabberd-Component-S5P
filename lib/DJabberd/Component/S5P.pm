@@ -197,7 +197,7 @@ sub finalize {
 
 sub register {
     my ($self, $vhost) = @_;
-    $vhost->register_hook("GetPlugin", sub { $_[1]->set($self) if($_[2] eq __PACKAGE__) });
+    $vhost->register_hook("GetPlugin", sub { (($_[2] eq __PACKAGE__)?$_[1]->set($self):$_[1]->decline) });
     $self->{proxy} = $vhost->server->_start_server($self->{port}, 'DJabberd::Connection::S5S');
     $self->SUPER::register($vhost);
 }
